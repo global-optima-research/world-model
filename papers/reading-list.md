@@ -61,7 +61,8 @@
 - **亮点**: 帧级自回归 + KV-recache，240s 长视频生成
 - **为什么必跑**: 最直接竞品，长序列实时生成正是 MambaWorld 要做的事
 - **关注点**: KV-recache 机制 vs SSM 隐状态，哪个更好？长序列一致性如何？
-- **状态**: [ ] 未跑
+- **状态**: [x] 已读 (2026-03-12) → 笔记见 `papers/longlive.md`
+- **TODO**: clone 代码，在 H800 上跑通推理
 
 #### WorldMem — 带记忆的 Minecraft 世界模型
 - **会议**: NeurIPS 2025
