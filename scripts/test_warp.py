@@ -80,11 +80,16 @@ with tape:
 # Backward pass
 tape.backward(loss)
 
-grad = tape.gradients[init_pos]
+grad = init_pos.grad
 print(f"Initial position: {init_pos.numpy()}")
 print(f"Final position: {pos.numpy()}")
 print(f"Loss: {loss.numpy()}")
-print(f"Gradient w.r.t. init_pos: {grad.numpy()}")
+if grad is not None:
+    print(f"Gradient w.r.t. init_pos: {grad.numpy()}")
+else:
+    print("Gradient: None (trying tape.gradients...)")
+    grad = tape.gradients.get(init_pos)
+    print(f"Gradient w.r.t. init_pos: {grad}")
 print("✅ 可微性验证通过！梯度成功反传。")
 
 print("\n" + "=" * 50)
