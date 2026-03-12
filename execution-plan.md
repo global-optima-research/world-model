@@ -40,6 +40,24 @@
 
 已分析代码架构，修改点明确。详见 `longlive-code-analysis.md`。
 
+### 硬件方案
+
+**所有实验默认在 8×RTX 5090 (32GB) 上运行。**
+
+| 任务 | 显存需求 | 5090 可行？ |
+|------|---------|-----------|
+| LongLive 推理（1.3B） | ~8GB | ✅ 单卡即可 |
+| GRPO 后训练（1.3B generator + reward） | ~20-25GB/卡 | ✅ 8卡分布式 |
+| 奖励计算（Warp + RAFT + DepthAnything） | ~5-8GB | ✅ 异步在空闲卡或 CPU 上跑 |
+| 14B teacher | ~30GB | ❌ 不需要（DMD 蒸馏已完成，GRPO 阶段无需 teacher） |
+
+GRPO 后训练不需要 DMD 的三模型架构（generator + teacher + critic），只需要:
+1. Generator（1.3B，需训练）
+2. Reference model（1.3B 冻结副本，用于 KL 正则化）
+3. Reward model（Warp 模拟器 + 运动估计，可异步计算）
+
+总显存 ~25GB/卡，8×5090 完全足够。H800 仅在需要时备用。
+
 ---
 
 ## 分阶段执行
@@ -131,10 +149,10 @@
 任务 3.1: 三域联合训练
   - 流体 + 软体 + 布料三种奖励联合训练
   - 训练配置:
-    ├─ 模型: LongLive 1.3B
+    ├─ 模型: LongLive 1.3B generator（不需要 14B teacher，DMD 蒸馏已完成）
     ├─ 方法: GRPO (group size=4)
-    ├─ 奖励: 三域物理奖励 + 视觉质量正则化
-    ├─ 硬件: 8×H800
+    ├─ 奖励: 三域物理奖励 + 视觉质量正则化（奖励计算与训练异步，不占训练卡显存）
+    ├─ 硬件: 8×RTX 5090 (32GB)
     └─ 估计时间: 2-3 天
 
 任务 3.2: 消融实验（与 3.1 并行或之后）
@@ -212,12 +230,13 @@
 ### Day 1-2: LongLive 推理
 ```bash
 # 1. 下载 Wan 2.1 权重
-# 需要: Wan2.1-T2V-1.3B, Wan2.1-T2V-14B (teacher), VAE, T5 encoder
+# 推理只需: Wan2.1-T2V-1.3B, VAE, T5 encoder（不需要 14B teacher）
+# GRPO 后训练也不需要 14B teacher（DMD 蒸馏阶段已完成）
 
 # 2. 下载 LongLive checkpoint
 # 需要: longlive_init.pt (或 ode_init.pt)
 
-# 3. 在 H800 上跑推理
+# 3. 在 5090 上跑推理（单卡 32GB 足够 1.3B 推理）
 cd LongLive
 bash inference.sh
 
