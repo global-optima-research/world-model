@@ -54,8 +54,8 @@ class FluidPhysicsReward:
         divergence = dvx_dx + dvy_dy  # 应接近 0
         div_magnitude = (divergence ** 2).mean()
 
-        # 归一化: div=0 → reward=1, div大 → reward→0
-        reward = torch.exp(-div_magnitude / 2.0)
+        # 实测 div_magnitude 量级 ~50-200
+        reward = torch.exp(-div_magnitude / 200.0)
         return reward.item()
 
     def mass_conservation_reward(self, flows: torch.Tensor, threshold: float = 1.0) -> float:
@@ -115,7 +115,7 @@ class FluidPhysicsReward:
         vort_dy = vorticity[:, 1:, :] - vorticity[:, :-1, :]
         vort_smoothness = (vort_dx ** 2).mean() + (vort_dy ** 2).mean()
 
-        # 涡度应随时间衰减（粘性耗散）
+        # 涡度的空间平滑性，实测量级 ~10-100
         if vorticity.shape[0] >= 2:
             vort_magnitude = (vorticity ** 2).mean(dim=(1, 2))
             # 检查后半段是否比前半段小
@@ -128,7 +128,7 @@ class FluidPhysicsReward:
         else:
             decay_reward = torch.tensor(0.5)
 
-        smoothness_reward = torch.exp(-vort_smoothness / 3.0)
+        smoothness_reward = torch.exp(-vort_smoothness / 100.0)
         reward = 0.6 * smoothness_reward.item() + 0.4 * decay_reward.item()
         return reward
 
@@ -167,7 +167,8 @@ class FluidPhysicsReward:
         )
         mean_border_grad = border_flow_grad.sum() / (border_mask[:, :min_h, :min_w].sum() + 1e-6)
 
-        reward = torch.exp(-mean_border_grad / 5.0)
+        # 实测量级 ~5-50
+        reward = torch.exp(-mean_border_grad / 50.0)
         return reward.item()
 
     def compute_reward(

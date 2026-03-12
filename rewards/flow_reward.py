@@ -60,8 +60,8 @@ class OpticalFlowReward:
             return 0.0
         flow_diff = flows[1:] - flows[:-1]  # (T-2, 2, H, W)
         acceleration = (flow_diff ** 2).mean()
-        # 归一化到 [0, 1] 范围, sigma 控制敏感度
-        reward = torch.exp(-acceleration / 10.0)
+        # 实测 acceleration 量级 ~1000-10000, sigma 调大
+        reward = torch.exp(-acceleration / 10000.0)
         return reward.item()
 
     def spatial_smoothness_reward(self, flows: torch.Tensor) -> float:
@@ -75,7 +75,8 @@ class OpticalFlowReward:
         dx = flows[:, :, :, 1:] - flows[:, :, :, :-1]  # 水平梯度
         dy = flows[:, :, 1:, :] - flows[:, :, :-1, :]  # 垂直梯度
         smoothness = (dx ** 2).mean() + (dy ** 2).mean()
-        reward = torch.exp(-smoothness / 5.0)
+        # 实测 smoothness 量级 ~50-200
+        reward = torch.exp(-smoothness / 200.0)
         return reward.item()
 
     def motion_magnitude_reward(self, flows: torch.Tensor) -> float:
@@ -88,10 +89,10 @@ class OpticalFlowReward:
         magnitude = torch.sqrt((flows ** 2).sum(dim=1))  # (T-1, H, W)
         mean_mag = magnitude.mean()
 
-        # 鼓励适度运动 (mean_mag 在 1-10 像素/帧之间)
-        # 高斯型 reward: 在 target=5 附近最高
-        target = 5.0
-        sigma = 5.0
+        # 实测 magnitude 量级 ~30-100 pixels/frame
+        # 鼓励适度运动，高斯型 reward 在 target 附近最高
+        target = 50.0
+        sigma = 40.0
         reward = torch.exp(-((mean_mag - target) ** 2) / (2 * sigma ** 2))
         return reward.item()
 
