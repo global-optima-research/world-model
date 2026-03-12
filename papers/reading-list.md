@@ -17,7 +17,7 @@
 - **论文**: https://oasis-model.github.io/
 - **代码**: https://github.com/etched-ai/open-oasis
 - **关注点**: 500M 参数的架构设计？Diffusion Transformer 如何做 autoregressive 帧生成？动作条件化怎么注入？
-- **状态**: [ ] 未读
+- **状态**: [x] 已读 → 笔记见 `papers/oasis.md`
 - **TODO**: clone 代码，在 5090 上跑通推理
 
 ### 3. 🔴 Mamba-2 — Transformers are SSMs
@@ -26,14 +26,14 @@
 - **论文**: https://arxiv.org/abs/2405.21060
 - **代码**: https://github.com/state-spaces/mamba
 - **关注点**: SSD (Structured State Space Duality) 层的实现细节？与 Transformer attention 的等价性？如何做 cross-sequence conditioning？
-- **状态**: [ ] 未读
+- **状态**: [x] 已读 (2026-03-12) → 笔记见 `papers/mamba2-transformers-are-ssms.md`
 
 ### 4. 🟡 Flow Matching for Generative Modeling
 - **作者**: Yaron Lipman, Ricky T. Q. Chen, Heli Ben-Hamu, Maximilian Nickel, Matt Le
 - **会议**: ICLR 2023
 - **论文**: https://arxiv.org/abs/2210.02747
 - **关注点**: Rectified Flow 的核心数学？为什么比 Diffusion 更直（更少步数）？ODE vs SDE formulation？
-- **状态**: [ ] 未读
+- **状态**: [x] 已读 (2026-03-12) → 笔记见 `papers/flow-matching.md`（含 Rectified Flow 联合笔记）
 
 ### 5. 🟡 DIAMOND — Diffusion for World Modeling
 - **作者**: Eloi Alonso, Adam Jelley, Vincent Micheli 等
@@ -42,7 +42,7 @@
 - **项目页**: https://diamond-wm.github.io/
 - **代码**: https://github.com/eloialonso/diamond
 - **关注点**: 仅用 87h 数据训练的效率来自哪里？Diffusion 在 world model 场景的具体 loss 设计？
-- **状态**: [ ] 未读
+- **状态**: [x] 已读 (2026-03-12) → 笔记见 `papers/diamond.md`
 - **TODO**: clone 代码，在 5090 上跑通推理
 
 ---
