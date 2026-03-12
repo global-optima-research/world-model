@@ -1,0 +1,30 @@
+# Dependencies
+LongLive/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Checkpoints & models
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+
+# Data
+*.mp4
+*.avi
+*.mov
