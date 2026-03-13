@@ -42,8 +42,8 @@ echo ">>> 使用 ${NGPU} 张 GPU: ${CUDA_VISIBLE_DEVICES}"
 torchrun --nproc_per_node=${NGPU} --master_port 29502 \
     fastvideo/train_grpo_physics.py \
     --seed 42 \
-    --pretrained_model_name_or_path LongLive/wan_models/Wan2.1-T2V-1.3B \
-    --vae_model_path LongLive/wan_models/Wan2.1-T2V-1.3B \
+    --pretrained_model_name_or_path Wan-AI/Wan2.1-T2V-1.3B-Diffusers \
+    --vae_model_path Wan-AI/Wan2.1-T2V-1.3B-Diffusers \
     --cache_dir data/.cache \
     --data_json_path data/physics_rl_embeddings/videos2caption.json \
     --gradient_checkpointing \
