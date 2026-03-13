@@ -277,7 +277,7 @@ def train_one_step(
 
         if isinstance(caption, str):
             caption = [caption] * args.num_generations
-        elif isinstance(caption, list):
+        elif isinstance(caption, (list, tuple)):
             caption = [item for item in caption for _ in range(args.num_generations)]
 
     reward, all_latents, all_log_probs, sigma_schedule = sample_reference_model(
