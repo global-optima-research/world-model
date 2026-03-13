@@ -1,0 +1,75 @@
+#!/bin/bash
+# Phase 2: 物理 Reward GRPO 训练 — 流体单域 PoC
+#
+# 前置步骤:
+#   1. python scripts/preprocess_physics_embeddings.py (预计算 embeddings)
+#   2. 确保 DanceGRPO 已安装
+#
+# 用法: bash scripts/train_grpo_physics.sh
+
+set -e
+
+cd "$(dirname "$0")/.."
+
+export WANDB_MODE=online
+export WANDB_PROJECT="physics-grpo"
+
+# 预计算 prompt embeddings (如果不存在)
+if [ ! -f "data/physics_rl_embeddings/videos2caption.json" ]; then
+    echo ">>> 预计算物理 prompt embeddings..."
+    CUDA_VISIBLE_DEVICES=0 python scripts/preprocess_physics_embeddings.py \
+        --model_path LongLive/wan_models/Wan2.1-T2V-1.3B \
+        --prompt_file scripts/physics_prompts.txt \
+        --output_dir data/physics_rl_embeddings
+fi
+
+echo ">>> 开始 GRPO 训练..."
+mkdir -p videos outputs/grpo_physics
+
+# 关键参数说明:
+#   --t 33:              生成 33 帧视频 (而非单帧图像)
+#   --num_generations 4: 每个 prompt 生成 4 个候选 (显存限制)
+#   --sampling_steps 20: denoising 步数
+#   --eta 0.3:           SDE 噪声系数 (用于计算 log prob)
+#   --use_physics_reward: 使用物理 reward 替代 HPSv2
+
+torchrun --nproc_per_node=8 --master_port 29502 \
+    fastvideo/train_grpo_physics.py \
+    --seed 42 \
+    --pretrained_model_name_or_path LongLive/wan_models/Wan2.1-T2V-1.3B \
+    --vae_model_path LongLive/wan_models/Wan2.1-T2V-1.3B \
+    --cache_dir data/.cache \
+    --data_json_path data/physics_rl_embeddings/videos2caption.json \
+    --gradient_checkpointing \
+    --train_batch_size 1 \
+    --num_latent_t 1 \
+    --sp_size 1 \
+    --train_sp_batch_size 1 \
+    --dataloader_num_workers 4 \
+    --gradient_accumulation_steps 4 \
+    --max_train_steps 200 \
+    --learning_rate 5e-6 \
+    --mixed_precision bf16 \
+    --checkpointing_steps 50 \
+    --allow_tf32 \
+    --cfg 0.0 \
+    --output_dir outputs/grpo_physics \
+    --h 480 \
+    --w 832 \
+    --t 33 \
+    --sampling_steps 20 \
+    --eta 0.3 \
+    --lr_warmup_steps 5 \
+    --sampler_seed 42 \
+    --max_grad_norm 1.0 \
+    --weight_decay 0.0001 \
+    --use_physics_reward \
+    --num_generations 4 \
+    --shift 3 \
+    --use_group \
+    --ignore_last \
+    --timestep_fraction 0.6 \
+    --init_same_noise \
+    --clip_range 1e-4 \
+    --adv_clip_max 5.0 \
+    --cfg_infer 5.0
