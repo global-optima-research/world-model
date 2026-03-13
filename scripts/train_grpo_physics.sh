@@ -33,7 +33,13 @@ mkdir -p videos outputs/grpo_physics
 #   --eta 0.3:           SDE 噪声系数 (用于计算 log prob)
 #   --use_physics_reward: 使用物理 reward 替代 HPSv2
 
-torchrun --nproc_per_node=8 --master_port 29502 \
+# GPU 选择: 根据当前空闲 GPU 调整
+# 默认使用 GPU 5,7 (2卡), 若 8 卡空闲可改为 0,1,2,3,4,5,6,7
+export CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-5,7}
+NGPU=$(echo $CUDA_VISIBLE_DEVICES | tr ',' '\n' | wc -l | tr -d ' ')
+echo ">>> 使用 ${NGPU} 张 GPU: ${CUDA_VISIBLE_DEVICES}"
+
+torchrun --nproc_per_node=${NGPU} --master_port 29502 \
     fastvideo/train_grpo_physics.py \
     --seed 42 \
     --pretrained_model_name_or_path LongLive/wan_models/Wan2.1-T2V-1.3B \
