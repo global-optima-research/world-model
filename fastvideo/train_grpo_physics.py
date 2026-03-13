@@ -431,7 +431,11 @@ def main(args):
     )
 
     if rank <= 0:
-        wandb.init(project="physics-grpo", config=vars(args))
+        wandb_mode = os.environ.get("WANDB_MODE", "online")
+        if wandb_mode != "disabled":
+            wandb.init(project="physics-grpo", config=vars(args))
+        else:
+            main_print("WANDB_MODE=disabled, skipping wandb init")
 
     main_print("***** Running Physics GRPO Training *****")
     main_print(f"  Num prompts = {len(train_dataset)}")
@@ -480,7 +484,7 @@ def main(args):
             })
             progress_bar.update(1)
 
-            if rank <= 0:
+            if rank <= 0 and os.environ.get("WANDB_MODE") != "disabled":
                 wandb.log({
                     "train_loss": loss, "learning_rate": lr_scheduler.get_last_lr()[0],
                     "step_time": step_time, "grad_norm": grad_norm,

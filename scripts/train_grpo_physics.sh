@@ -11,7 +11,7 @@ set -e
 
 cd "$(dirname "$0")/.."
 
-export WANDB_MODE=online
+export WANDB_MODE=${WANDB_MODE:-online}
 export WANDB_PROJECT="physics-grpo"
 
 # 预计算 prompt embeddings (如果不存在)
