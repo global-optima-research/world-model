@@ -35,7 +35,7 @@ echo ">>> 使用 ${NGPU} 张 GPU: ${CUDA_VISIBLE_DEVICES}"
 #   --t 5:               最短可计算光流的视频 (5帧, 4帧间隔)
 #   --h 512 --w 512:     正方形，与 DanceGRPO 原始一致
 #   --num_generations 8: 增加候选数，advantage 估计更稳定
-#   --gradient_accumulation_steps 1: 不累积，避免梯度抵消
+#   --gradient_accumulation_steps 8: 与 num_generations 对齐，累积完整 group 再 step
 #   --clip_range 1e-4:   对齐 DanceGRPO 原始
 #   --sampling_steps 20: 对齐 DanceGRPO 原始
 #   --max_train_steps 100: 10 epochs × 10 steps/epoch
@@ -53,7 +53,7 @@ torchrun --nproc_per_node=${NGPU} --master_port 29502 \
     --sp_size 1 \
     --train_sp_batch_size 1 \
     --dataloader_num_workers 4 \
-    --gradient_accumulation_steps 1 \
+    --gradient_accumulation_steps 8 \
     --max_train_steps 100 \
     --learning_rate 1e-5 \
     --mixed_precision bf16 \
