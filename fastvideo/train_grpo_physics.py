@@ -408,13 +408,31 @@ def main(args):
     ).to(device)
 
     # FSDP 包装 (原始 DanceGRPO Wan 脚本漏了这一步)
-    fsdp_kwargs, no_split_modules = get_dit_fsdp_kwargs(
-        transformer,
-        args.fsdp_sharding_startegy,
-        False,
-        args.use_cpu_offload,
-        args.master_weight_type,
-    )
+    from torch.distributed.fsdp import MixedPrecision, ShardingStrategy
+    from torch.distributed.fsdp.wrap import transformer_auto_wrap_policy
+    import functools
+
+    sharding_map = {
+        "full": ShardingStrategy.FULL_SHARD,
+        "hybrid_full": ShardingStrategy.HYBRID_SHARD,
+        "none": ShardingStrategy.NO_SHARD,
+    }
+    sharding = sharding_map.get(args.fsdp_sharding_startegy, ShardingStrategy.FULL_SHARD)
+    weight_type = torch.float32 if args.master_weight_type == "fp32" else torch.bfloat16
+    fsdp_kwargs = {
+        "auto_wrap_policy": functools.partial(
+            transformer_auto_wrap_policy,
+            transformer_layer_cls=(WanTransformerBlock,),
+        ),
+        "mixed_precision": MixedPrecision(
+            param_dtype=weight_type,
+            reduce_dtype=weight_type,
+            buffer_dtype=weight_type,
+        ),
+        "sharding_strategy": sharding,
+        "device_id": torch.cuda.current_device(),
+        "limit_all_gathers": True,
+    }
     transformer = FSDP(transformer, **fsdp_kwargs)
     main_print(f"--> FSDP initialized (sharding: {args.fsdp_sharding_startegy})")
 
