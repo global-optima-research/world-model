@@ -53,17 +53,17 @@ torchrun --nproc_per_node=${NGPU} --master_port 29502 \
     --train_sp_batch_size 1 \
     --dataloader_num_workers 4 \
     --gradient_accumulation_steps 4 \
-    --max_train_steps 200 \
-    --learning_rate 5e-6 \
+    --max_train_steps 50 \
+    --learning_rate 1e-5 \
     --mixed_precision bf16 \
-    --checkpointing_steps 50 \
+    --checkpointing_steps 25 \
     --allow_tf32 \
     --cfg 0.0 \
     --output_dir outputs/grpo_physics \
     --h 480 \
     --w 832 \
     --t 33 \
-    --sampling_steps 20 \
+    --sampling_steps 10 \
     --eta 0.3 \
     --lr_warmup_steps 5 \
     --sampler_seed 42 \
@@ -76,6 +76,6 @@ torchrun --nproc_per_node=${NGPU} --master_port 29502 \
     --ignore_last \
     --timestep_fraction 0.6 \
     --init_same_noise \
-    --clip_range 1e-4 \
+    --clip_range 1e-2 \
     --adv_clip_max 5.0 \
     --cfg_infer 5.0

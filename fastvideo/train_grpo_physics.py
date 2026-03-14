@@ -446,7 +446,11 @@ def main(args):
     progress_bar = tqdm(range(0, args.max_train_steps), desc="Steps", disable=local_rank > 0)
     step_times = deque(maxlen=100)
 
-    for epoch in range(1):
+    global_step = 0
+    max_epochs = (args.max_train_steps // len(train_dataloader)) + 1
+    main_print(f"  Max epochs = {max_epochs} (to reach {args.max_train_steps} steps)")
+
+    for epoch in range(max_epochs):
         if isinstance(sampler, DistributedSampler):
             sampler.set_epoch(epoch)
         for step, (prompt_embeds, negative_prompt_embeds, caption) in enumerate(train_dataloader):
@@ -454,10 +458,10 @@ def main(args):
             negative_prompt_embeds = negative_prompt_embeds.to(device)
             start_time = time.time()
 
-            if (step - 1) % args.checkpointing_steps == 0 and step != 1:
+            if global_step > 0 and global_step % args.checkpointing_steps == 0:
                 cpu_state = transformer.state_dict()
                 if rank <= 0:
-                    save_dir = os.path.join(args.output_dir, f"checkpoint-{step}-{epoch}")
+                    save_dir = os.path.join(args.output_dir, f"checkpoint-{global_step}")
                     os.makedirs(save_dir, exist_ok=True)
                     save_file(cpu_state, os.path.join(save_dir, "diffusion_pytorch_model.safetensors"))
                     config_dict = dict(transformer.config)
@@ -465,10 +469,10 @@ def main(args):
                         del config_dict["dtype"]
                     with open(os.path.join(save_dir, "config.json"), "w") as f:
                         json.dump(config_dict, f, indent=4)
-                main_print(f"--> Checkpoint saved at step {step}")
+                main_print(f"--> Checkpoint saved at step {global_step}")
                 dist.barrier()
 
-            if step > args.max_train_steps:
+            if global_step >= args.max_train_steps:
                 break
 
             loss, grad_norm = train_one_step(
@@ -477,10 +481,12 @@ def main(args):
                 caption, args.max_grad_norm,
             )
 
+            global_step += 1
             step_time = time.time() - start_time
             step_times.append(step_time)
             progress_bar.set_postfix({
                 "loss": f"{loss:.4f}", "step_time": f"{step_time:.1f}s", "grad_norm": f"{grad_norm:.3f}",
+                "epoch": epoch, "step": global_step,
             })
             progress_bar.update(1)
 
@@ -488,7 +494,10 @@ def main(args):
                 wandb.log({
                     "train_loss": loss, "learning_rate": lr_scheduler.get_last_lr()[0],
                     "step_time": step_time, "grad_norm": grad_norm,
-                }, step=step)
+                }, step=global_step)
+
+        if global_step >= args.max_train_steps:
+            break
 
     if get_sequence_parallel_state():
         destroy_sequence_parallel_group()
