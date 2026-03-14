@@ -407,6 +407,17 @@ def main(args):
         torch_dtype=torch.bfloat16,
     ).to(device)
 
+    # FSDP 包装 (原始 DanceGRPO Wan 脚本漏了这一步)
+    fsdp_kwargs, no_split_modules = get_dit_fsdp_kwargs(
+        transformer,
+        args.fsdp_sharding_startegy,
+        False,
+        args.use_cpu_offload,
+        args.master_weight_type,
+    )
+    transformer = FSDP(transformer, **fsdp_kwargs)
+    main_print(f"--> FSDP initialized (sharding: {args.fsdp_sharding_startegy})")
+
     if args.gradient_checkpointing:
         apply_fsdp_checkpointing(transformer, (WanTransformerBlock,), args.selective_checkpointing)
 
@@ -470,12 +481,13 @@ def main(args):
             start_time = time.time()
 
             if global_step > 0 and global_step % args.checkpointing_steps == 0:
-                cpu_state = transformer.state_dict()
+                cpu_state = get_model_state_dict(transformer, options=StateDictOptions(full_state_dict=True, cpu_offload=True))
                 if rank <= 0:
                     save_dir = os.path.join(args.output_dir, f"checkpoint-{global_step}")
                     os.makedirs(save_dir, exist_ok=True)
                     save_file(cpu_state, os.path.join(save_dir, "diffusion_pytorch_model.safetensors"))
-                    config_dict = dict(transformer.config)
+                    unwrapped = transformer.module if hasattr(transformer, 'module') else transformer
+                    config_dict = dict(unwrapped.config)
                     if "dtype" in config_dict:
                         del config_dict["dtype"]
                     with open(os.path.join(save_dir, "config.json"), "w") as f:
