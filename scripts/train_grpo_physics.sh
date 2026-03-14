@@ -55,12 +55,12 @@ torchrun --nproc_per_node=${NGPU} --master_port 29502 \
     --dataloader_num_workers 4 \
     --gradient_accumulation_steps 8 \
     --max_train_steps 100 \
-    --learning_rate 1e-5 \
+    --learning_rate 1e-4 \
     --mixed_precision bf16 \
     --checkpointing_steps 50 \
     --allow_tf32 \
     --cfg 0.0 \
-    --output_dir outputs/grpo_physics_v5 \
+    --output_dir outputs/grpo_physics_v6 \
     --h 512 \
     --w 512 \
     --t 5 \
