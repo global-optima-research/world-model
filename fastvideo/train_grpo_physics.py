@@ -1,11 +1,11 @@
 """
-物理 Reward GRPO 训练脚本
+GRPO 训练脚本 (物理 Reward / CLIP Reward)
 
 Fork 自 DanceGRPO/fastvideo/train_grpo_wan_2_1.py
 核心修改:
-  1. 替换 HPSv2 reward → PhysicsRewardModel
-  2. 支持多帧视频 (--t 33) 而非单帧
-  3. 视频解码后直接传给物理 reward，不保存中间 mp4
+  1. 支持 PhysicsRewardModel (视频) 和 CLIP score (单帧)
+  2. 支持多帧视频 (--t 33) 和单帧图像 (--t 1)
+  3. 视频解码后直接传给 reward，不保存中间 mp4
 
 原始版权: FastVideo Team + ByteDance (Apache 2.0)
 """
@@ -51,7 +51,7 @@ from fastvideo.utils.parallel_states import (
 from fastvideo.utils.fsdp_util import get_dit_fsdp_kwargs, apply_fsdp_checkpointing
 from fastvideo.utils.logging_ import main_print
 
-# 物理 Reward
+# Reward models
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from rewards.physics_reward import PhysicsRewardModel
 
@@ -173,7 +173,7 @@ def decode_video_tensor(vae, latents):
 
 def sample_reference_model(
     args, device, transformer, vae, encoder_hidden_states, negative_prompt_embeds,
-    physics_reward_model, caption,
+    reward_model, caption,
 ):
     """采样 + 物理 reward 打分"""
     w, h, t = args.w, args.h, args.t
@@ -220,11 +220,11 @@ def sample_reference_model(
         all_latents.append(batch_latents)
         all_log_probs.append(batch_log_probs)
 
-        # ===== 物理 Reward (替换 HPSv2) =====
+        # ===== Reward 计算 =====
         video_tensor = decode_video_tensor(vae, latents)
 
         rank = int(os.environ.get("RANK", 0))
-        # 可选: 保存视频用于可视化
+        # 可选: 保存视频/图像用于可视化
         if rank == 0 and index < 4:
             video_processor = VideoProcessor(vae_scale_factor=8)
             with torch.inference_mode():
@@ -234,12 +234,17 @@ def sample_reference_model(
                     dec_lat = latents / ls + lm
                     vid = vae.decode(dec_lat, return_dict=False)[0]
                     decoded = video_processor.postprocess_video(vid)
-            export_to_video(decoded[0], f"./videos/physics_{rank}_{index}.mp4", fps=16)
+            export_to_video(decoded[0], f"./videos/grpo_{rank}_{index}.mp4", fps=16)
 
-        # 计算物理 reward
         with torch.no_grad():
-            physics_score = physics_reward_model.score_video(video_tensor, batch_caption[0])
-            reward = torch.tensor([physics_score], device=device, dtype=torch.float32)
+            if args.use_clip_reward:
+                # CLIP score: 取第一帧计算 text-image alignment
+                frame = video_tensor[0]  # (C, H, W) in [0, 1]
+                reward = reward_model.score(frame, batch_caption[0])
+            else:
+                # 物理 reward
+                physics_score = reward_model.score_video(video_tensor, batch_caption[0])
+                reward = torch.tensor([physics_score], device=device, dtype=torch.float32)
         all_rewards.append(reward)
 
     all_latents = torch.cat(all_latents, dim=0)
@@ -259,7 +264,7 @@ def gather_tensor(tensor):
 
 
 def train_one_step(
-    args, device, transformer, vae, physics_reward_model,
+    args, device, transformer, vae, reward_model,
     optimizer, lr_scheduler, encoder_hidden_states, negative_prompt_embeds,
     caption, max_grad_norm,
 ):
@@ -282,7 +287,7 @@ def train_one_step(
 
     reward, all_latents, all_log_probs, sigma_schedule = sample_reference_model(
         args, device, transformer, vae, encoder_hidden_states, negative_prompt_embeds,
-        physics_reward_model, caption,
+        reward_model, caption,
     )
 
     batch_size = all_latents.shape[0]
@@ -383,10 +388,16 @@ def main(args):
         os.makedirs(args.output_dir, exist_ok=True)
         os.makedirs("videos", exist_ok=True)
 
-    # ===== 物理 Reward Model =====
-    main_print("--> Loading PhysicsRewardModel...")
-    physics_reward_model = PhysicsRewardModel(device=f"cuda:{local_rank}", mode="auto")
-    main_print("--> PhysicsRewardModel loaded")
+    # ===== Reward Model =====
+    if args.use_clip_reward:
+        from rewards.clip_reward import CLIPRewardModel
+        main_print("--> Loading CLIPRewardModel...")
+        reward_model = CLIPRewardModel(device=f"cuda:{local_rank}")
+        main_print("--> CLIPRewardModel loaded")
+    else:
+        main_print("--> Loading PhysicsRewardModel...")
+        reward_model = PhysicsRewardModel(device=f"cuda:{local_rank}", mode="auto")
+        main_print("--> PhysicsRewardModel loaded")
 
     # ===== Transformer =====
     main_print(f"--> Loading model from {args.pretrained_model_name_or_path}")
@@ -476,7 +487,7 @@ def main(args):
                 break
 
             loss, grad_norm = train_one_step(
-                args, device, transformer, vae, physics_reward_model,
+                args, device, transformer, vae, reward_model,
                 optimizer, lr_scheduler, prompt_embeds, negative_prompt_embeds,
                 caption, args.max_grad_norm,
             )
@@ -556,6 +567,7 @@ if __name__ == "__main__":
     parser.add_argument("--use_group", action="store_true", default=False)
     parser.add_argument("--num_generations", type=int, default=4)
     parser.add_argument("--use_physics_reward", action="store_true", default=False)
+    parser.add_argument("--use_clip_reward", action="store_true", default=False)
     parser.add_argument("--use_hpsv2", action="store_true", default=False)
     parser.add_argument("--ignore_last", action="store_true", default=False)
     parser.add_argument("--init_same_noise", action="store_true", default=False)
