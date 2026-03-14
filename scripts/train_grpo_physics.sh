@@ -1,9 +1,9 @@
 #!/bin/bash
-# Phase 2: 物理 Reward GRPO 训练 — 流体单域 PoC
+# Phase 2: 物理 Reward GRPO 训练
 #
 # 前置步骤:
 #   1. python scripts/preprocess_physics_embeddings.py (预计算 embeddings)
-#   2. 确保 DanceGRPO 已安装
+#   2. pip install -e DanceGRPO --no-deps
 #
 # 用法: bash scripts/train_grpo_physics.sh
 
@@ -26,18 +26,19 @@ fi
 echo ">>> 开始 GRPO 训练..."
 mkdir -p videos outputs/grpo_physics
 
-# 关键参数说明:
-#   --t 33:              生成 33 帧视频 (而非单帧图像)
-#   --num_generations 4: 每个 prompt 生成 4 个候选 (显存限制)
-#   --sampling_steps 20: denoising 步数
-#   --eta 0.3:           SDE 噪声系数 (用于计算 log prob)
-#   --use_physics_reward: 使用物理 reward 替代 HPSv2
-
-# GPU 选择: 根据当前空闲 GPU 调整
-# 默认使用 GPU 5,7 (2卡), 若 8 卡空闲可改为 0,1,2,3,4,5,6,7
+# GPU 选择
 export CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-5,7}
 NGPU=$(echo $CUDA_VISIBLE_DEVICES | tr ',' '\n' | wc -l | tr -d ' ')
 echo ">>> 使用 ${NGPU} 张 GPU: ${CUDA_VISIBLE_DEVICES}"
+
+# 关键改动 (对齐 DanceGRPO 原始配置):
+#   --t 5:               最短可计算光流的视频 (5帧, 4帧间隔)
+#   --h 512 --w 512:     正方形，与 DanceGRPO 原始一致
+#   --num_generations 8: 增加候选数，advantage 估计更稳定
+#   --gradient_accumulation_steps 1: 不累积，避免梯度抵消
+#   --clip_range 1e-4:   对齐 DanceGRPO 原始
+#   --sampling_steps 20: 对齐 DanceGRPO 原始
+#   --max_train_steps 100: 10 epochs × 10 steps/epoch
 
 torchrun --nproc_per_node=${NGPU} --master_port 29502 \
     fastvideo/train_grpo_physics.py \
@@ -52,30 +53,30 @@ torchrun --nproc_per_node=${NGPU} --master_port 29502 \
     --sp_size 1 \
     --train_sp_batch_size 1 \
     --dataloader_num_workers 4 \
-    --gradient_accumulation_steps 4 \
-    --max_train_steps 50 \
+    --gradient_accumulation_steps 1 \
+    --max_train_steps 100 \
     --learning_rate 1e-5 \
     --mixed_precision bf16 \
-    --checkpointing_steps 25 \
+    --checkpointing_steps 50 \
     --allow_tf32 \
     --cfg 0.0 \
-    --output_dir outputs/grpo_physics \
-    --h 480 \
-    --w 832 \
-    --t 33 \
-    --sampling_steps 10 \
+    --output_dir outputs/grpo_physics_v3 \
+    --h 512 \
+    --w 512 \
+    --t 5 \
+    --sampling_steps 20 \
     --eta 0.3 \
-    --lr_warmup_steps 5 \
+    --lr_warmup_steps 0 \
     --sampler_seed 42 \
     --max_grad_norm 1.0 \
     --weight_decay 0.0001 \
     --use_physics_reward \
-    --num_generations 4 \
+    --num_generations 8 \
     --shift 3 \
     --use_group \
     --ignore_last \
     --timestep_fraction 0.6 \
     --init_same_noise \
-    --clip_range 1e-2 \
+    --clip_range 1e-4 \
     --adv_clip_max 5.0 \
     --cfg_infer 5.0
