@@ -12,6 +12,8 @@ cd "$(dirname "$0")/.."
 
 export WANDB_MODE=${WANDB_MODE:-online}
 export WANDB_PROJECT="grpo-singleframe"
+export HF_HUB_OFFLINE=1
+export TRANSFORMERS_OFFLINE=1
 
 # 预计算 prompt embeddings (如果不存在)
 if [ ! -f "data/physics_rl_embeddings/videos2caption.json" ]; then

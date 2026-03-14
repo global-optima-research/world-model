@@ -11,13 +11,15 @@ from transformers import CLIPModel, CLIPProcessor
 
 
 class CLIPRewardModel:
+    # 5090 本地缓存路径
+    LOCAL_CACHE = "/data/xuhao/.cache/huggingface/hub/models--openai--clip-vit-large-patch14/snapshots/32bd64288804d66eefd0ccbe215aa642df71cc41"
+
     def __init__(self, device="cuda", model_name="openai/clip-vit-large-patch14"):
         self.device = device
-        # 强制离线模式，避免 HuggingFace 网络请求
-        os.environ["HF_HUB_OFFLINE"] = "1"
-        os.environ["TRANSFORMERS_OFFLINE"] = "1"
-        self.model = CLIPModel.from_pretrained(model_name).to(device).eval()
-        self.processor = CLIPProcessor.from_pretrained(model_name)
+        # 优先使用本地缓存（5090 无法访问 HuggingFace）
+        load_path = self.LOCAL_CACHE if os.path.exists(self.LOCAL_CACHE) else model_name
+        self.model = CLIPModel.from_pretrained(load_path, local_files_only=True).to(device).eval()
+        self.processor = CLIPProcessor.from_pretrained(load_path, local_files_only=True)
         # 冻结参数
         for param in self.model.parameters():
             param.requires_grad = False
