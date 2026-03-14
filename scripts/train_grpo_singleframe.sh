@@ -83,4 +83,5 @@ torchrun --nproc_per_node=${NGPU} --master_port 29503 \
     --init_same_noise \
     --clip_range 1e-4 \
     --adv_clip_max 5.0 \
-    --cfg_infer 5.0
+    --cfg_infer 5.0 \
+    --num_ppo_epochs 4

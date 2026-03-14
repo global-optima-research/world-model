@@ -327,49 +327,60 @@ def train_one_step(
         advantages = (samples["rewards"] - gathered_reward.mean()) / (gathered_reward.std() + 1e-8)
         samples["advantages"] = advantages
 
-    perms = torch.stack([
-        torch.randperm(len(samples["timesteps"][0])) for _ in range(batch_size)
-    ]).to(device)
-
-    for key in ["timesteps", "latents", "next_latents", "log_probs"]:
-        samples[key] = samples[key][torch.arange(batch_size).to(device)[:, None], perms]
-
-    samples_batched = {k: v.unsqueeze(1) for k, v in samples.items()}
-    samples_batched_list = [dict(zip(samples_batched, x)) for x in zip(*samples_batched.values())]
-
     train_timesteps = int(len(samples["timesteps"][0]) * args.timestep_fraction)
-    for i, sample in list(enumerate(samples_batched_list)):
-        for _ in range(train_timesteps):
-            new_log_probs = grpo_one_step(
-                args, sample["latents"][:, _], sample["next_latents"][:, _],
-                sample["encoder_hidden_states"], sample["negative_prompt_embeds"],
-                transformer, sample["timesteps"][:, _], perms[i][_], sigma_schedule,
-            )
+    grad_norm = torch.tensor(0.0, device=device)
 
-            adv = torch.clamp(sample["advantages"], -args.adv_clip_max, args.adv_clip_max)
-            ratio = torch.exp(new_log_probs - sample["log_probs"][:, _])
-            unclipped_loss = -adv * ratio
-            clipped_loss = -adv * torch.clamp(ratio, 1.0 - args.clip_range, 1.0 + args.clip_range)
-            loss = torch.mean(torch.maximum(unclipped_loss, clipped_loss)) / (args.gradient_accumulation_steps * train_timesteps)
+    # Multi-epoch PPO: 在同一批采样数据上训练多轮
+    # Epoch 1: ratio=1.0 (on-policy), 但 optimizer.step() 后模型参数改变
+    # Epoch 2+: ratio≠1.0, clip_range 生效, 梯度信号增强
+    for ppo_epoch in range(args.num_ppo_epochs):
+        # 每个 epoch 重新 shuffle timestep 顺序
+        perms = torch.stack([
+            torch.randperm(len(samples["timesteps"][0])) for _ in range(batch_size)
+        ]).to(device)
 
-            loss.backward()
-            avg_loss = loss.detach().clone()
-            dist.all_reduce(avg_loss, op=dist.ReduceOp.AVG)
-            total_loss += avg_loss.item()
+        shuffled_samples = {}
+        for key in ["timesteps", "latents", "next_latents", "log_probs"]:
+            shuffled_samples[key] = samples[key][torch.arange(batch_size).to(device)[:, None], perms]
+        # 非 timestep-level 的字段直接复制
+        for key in ["rewards", "advantages", "encoder_hidden_states", "negative_prompt_embeds"]:
+            shuffled_samples[key] = samples[key]
 
-        if (i + 1) % args.gradient_accumulation_steps == 0:
-            grad_norm = torch.nn.utils.clip_grad_norm_(transformer.parameters(), max_norm=max_grad_norm)
-            optimizer.step()
-            lr_scheduler.step()
-            optimizer.zero_grad()
+        samples_batched = {k: v.unsqueeze(1) for k, v in shuffled_samples.items()}
+        samples_batched_list = [dict(zip(samples_batched, x)) for x in zip(*samples_batched.values())]
 
-        if dist.get_rank() % 8 == 0:
-            with torch.no_grad():
-                ratio_val = ratio.item()
-                new_lp = new_log_probs.item()
-                old_lp = sample["log_probs"][:, train_timesteps-1].item()
-            print(f"reward={sample['rewards'].item():.4f} adv={sample['advantages'].item():.4f} loss={loss.item():.6f} ratio={ratio_val:.10f} new_lp={new_lp:.6f} old_lp={old_lp:.6f} diff={new_lp-old_lp:.10f}")
-        dist.barrier()
+        for i, sample in list(enumerate(samples_batched_list)):
+            for t_idx in range(train_timesteps):
+                new_log_probs = grpo_one_step(
+                    args, sample["latents"][:, t_idx], sample["next_latents"][:, t_idx],
+                    sample["encoder_hidden_states"], sample["negative_prompt_embeds"],
+                    transformer, sample["timesteps"][:, t_idx], perms[i][t_idx], sigma_schedule,
+                )
+
+                adv = torch.clamp(sample["advantages"], -args.adv_clip_max, args.adv_clip_max)
+                ratio = torch.exp(new_log_probs - sample["log_probs"][:, t_idx])
+                unclipped_loss = -adv * ratio
+                clipped_loss = -adv * torch.clamp(ratio, 1.0 - args.clip_range, 1.0 + args.clip_range)
+                loss = torch.mean(torch.maximum(unclipped_loss, clipped_loss)) / (args.gradient_accumulation_steps * train_timesteps)
+
+                loss.backward()
+                avg_loss = loss.detach().clone()
+                dist.all_reduce(avg_loss, op=dist.ReduceOp.AVG)
+                total_loss += avg_loss.item()
+
+            if (i + 1) % args.gradient_accumulation_steps == 0:
+                grad_norm = torch.nn.utils.clip_grad_norm_(transformer.parameters(), max_norm=max_grad_norm)
+                optimizer.step()
+                lr_scheduler.step()
+                optimizer.zero_grad()
+
+            if dist.get_rank() % 8 == 0:
+                with torch.no_grad():
+                    ratio_val = ratio.item()
+                    new_lp = new_log_probs.item()
+                    old_lp = sample["log_probs"][:, t_idx].item()
+                print(f"[epoch={ppo_epoch}] reward={sample['rewards'].item():.4f} adv={sample['advantages'].item():.4f} loss={loss.item():.6f} ratio={ratio_val:.10f} new_lp={new_lp:.6f} old_lp={old_lp:.6f} diff={new_lp-old_lp:.10f}")
+            dist.barrier()
 
     return total_loss, grad_norm.item()
 
@@ -461,6 +472,7 @@ def main(args):
     main_print(f"  Num prompts = {len(train_dataset)}")
     main_print(f"  Video size = {args.h}x{args.w}x{args.t}")
     main_print(f"  Num generations per prompt = {args.num_generations}")
+    main_print(f"  PPO epochs per batch = {args.num_ppo_epochs}")
     main_print(f"  Max train steps = {args.max_train_steps}")
 
     progress_bar = tqdm(range(0, args.max_train_steps), desc="Steps", disable=local_rank > 0)
@@ -586,6 +598,8 @@ if __name__ == "__main__":
     parser.add_argument("--clip_range", type=float, default=1e-4)
     parser.add_argument("--adv_clip_max", type=float, default=5.0)
     parser.add_argument("--cfg_infer", type=float, default=5.0)
+    parser.add_argument("--num_ppo_epochs", type=int, default=4, help="PPO epochs per sample batch (>1 makes ratio deviate from 1.0)")
+
 
     args = parser.parse_args()
     main(args)
