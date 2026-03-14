@@ -5,6 +5,7 @@ CLIP Score Reward Model
 用于单帧 GRPO 训练的 PoC 验证。
 """
 
+import os
 import torch
 from transformers import CLIPModel, CLIPProcessor
 
@@ -12,6 +13,9 @@ from transformers import CLIPModel, CLIPProcessor
 class CLIPRewardModel:
     def __init__(self, device="cuda", model_name="openai/clip-vit-large-patch14"):
         self.device = device
+        # 强制离线模式，避免 HuggingFace 网络请求
+        os.environ["HF_HUB_OFFLINE"] = "1"
+        os.environ["TRANSFORMERS_OFFLINE"] = "1"
         self.model = CLIPModel.from_pretrained(model_name).to(device).eval()
         self.processor = CLIPProcessor.from_pretrained(model_name)
         # 冻结参数
