@@ -401,10 +401,11 @@ def main(args):
 
     # ===== Transformer =====
     main_print(f"--> Loading model from {args.pretrained_model_name_or_path}")
+    master_dtype = torch.float32 if args.master_weight_type == "fp32" else torch.bfloat16
     transformer = WanTransformer3DModel.from_pretrained(
         args.pretrained_model_name_or_path,
         subfolder="transformer",
-        torch_dtype=torch.bfloat16,
+        torch_dtype=master_dtype,
     ).to(device)
 
     # FSDP 包装 (原始 DanceGRPO Wan 脚本漏了这一步)
