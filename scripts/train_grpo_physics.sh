@@ -36,7 +36,7 @@ echo ">>> 使用 ${NGPU} 张 GPU: ${CUDA_VISIBLE_DEVICES}"
 #   --h 512 --w 512:     正方形，与 DanceGRPO 原始一致
 #   --num_generations 8: 增加候选数，advantage 估计更稳定
 #   --gradient_accumulation_steps 8: 与 num_generations 对齐，累积完整 group 再 step
-#   --clip_range 1e-4:   对齐 DanceGRPO 原始
+#   --clip_range 0.2:    放宽 clipping，视频场景 ratio 变化大于单帧
 #   --sampling_steps 20: 对齐 DanceGRPO 原始
 #   --max_train_steps 100: 10 epochs × 10 steps/epoch
 
@@ -60,7 +60,7 @@ torchrun --nproc_per_node=${NGPU} --master_port 29502 \
     --checkpointing_steps 50 \
     --allow_tf32 \
     --cfg 0.0 \
-    --output_dir outputs/grpo_physics_v3 \
+    --output_dir outputs/grpo_physics_v5 \
     --h 512 \
     --w 512 \
     --t 5 \
@@ -77,6 +77,6 @@ torchrun --nproc_per_node=${NGPU} --master_port 29502 \
     --ignore_last \
     --timestep_fraction 0.6 \
     --init_same_noise \
-    --clip_range 1e-4 \
+    --clip_range 0.2 \
     --adv_clip_max 5.0 \
     --cfg_infer 5.0
