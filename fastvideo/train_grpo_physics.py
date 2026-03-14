@@ -364,7 +364,11 @@ def train_one_step(
             optimizer.zero_grad()
 
         if dist.get_rank() % 8 == 0:
-            print(f"reward={sample['rewards'].item():.4f} adv={sample['advantages'].item():.4f} loss={loss.item():.6f}")
+            with torch.no_grad():
+                ratio_val = ratio.item()
+                new_lp = new_log_probs.item()
+                old_lp = sample["log_probs"][:, train_timesteps-1].item()
+            print(f"reward={sample['rewards'].item():.4f} adv={sample['advantages'].item():.4f} loss={loss.item():.6f} ratio={ratio_val:.6f} new_lp={new_lp:.2f} old_lp={old_lp:.2f}")
         dist.barrier()
 
     return total_loss, grad_norm.item()
