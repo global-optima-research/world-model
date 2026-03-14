@@ -401,44 +401,19 @@ def main(args):
 
     # ===== Transformer =====
     main_print(f"--> Loading model from {args.pretrained_model_name_or_path}")
-    master_dtype = torch.float32 if args.master_weight_type == "fp32" else torch.bfloat16
     transformer = WanTransformer3DModel.from_pretrained(
         args.pretrained_model_name_or_path,
         subfolder="transformer",
-        torch_dtype=master_dtype,
+        torch_dtype=torch.bfloat16,
     ).to(device)
-
-    # FSDP 包装 (原始 DanceGRPO Wan 脚本漏了这一步)
-    from torch.distributed.fsdp import MixedPrecision, ShardingStrategy
-    from torch.distributed.fsdp.wrap import transformer_auto_wrap_policy
-    import functools
-
-    sharding_map = {
-        "full": ShardingStrategy.FULL_SHARD,
-        "hybrid_full": ShardingStrategy.HYBRID_SHARD,
-        "none": ShardingStrategy.NO_SHARD,
-    }
-    sharding = sharding_map.get(args.fsdp_sharding_startegy, ShardingStrategy.FULL_SHARD)
-    weight_type = torch.float32 if args.master_weight_type == "fp32" else torch.bfloat16
-    fsdp_kwargs = {
-        "auto_wrap_policy": functools.partial(
-            transformer_auto_wrap_policy,
-            transformer_layer_cls=(WanTransformerBlock,),
-        ),
-        "mixed_precision": MixedPrecision(
-            param_dtype=weight_type,
-            reduce_dtype=weight_type,
-            buffer_dtype=weight_type,
-        ),
-        "sharding_strategy": sharding,
-        "device_id": torch.cuda.current_device(),
-        "limit_all_gathers": True,
-    }
-    transformer = FSDP(transformer, **fsdp_kwargs)
-    main_print(f"--> FSDP initialized (sharding: {args.fsdp_sharding_startegy})")
 
     if args.gradient_checkpointing:
         apply_fsdp_checkpointing(transformer, (WanTransformerBlock,), args.selective_checkpointing)
+
+    # DDP 包装: 梯度同步 (原始 DanceGRPO Wan 脚本漏了这一步)
+    from torch.nn.parallel import DistributedDataParallel as DDP
+    transformer = DDP(transformer, device_ids=[local_rank], find_unused_parameters=True)
+    main_print(f"--> DDP initialized on GPU {local_rank}")
 
     # ===== VAE =====
     vae = AutoencoderKLWan.from_pretrained(
