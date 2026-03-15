@@ -54,7 +54,7 @@ torchrun --nproc_per_node=${NGPU} --master_port 29502 \
     --train_sp_batch_size 1 \
     --dataloader_num_workers 4 \
     --gradient_accumulation_steps 8 \
-    --max_train_steps 100 \
+    --max_train_steps 300 \
     --learning_rate 1e-5 \
     --mixed_precision bf16 \
     --checkpointing_steps 50 \
