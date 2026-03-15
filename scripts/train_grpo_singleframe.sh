@@ -59,7 +59,7 @@ torchrun --nproc_per_node=${NGPU} --master_port 29503 \
     --dataloader_num_workers 4 \
     --gradient_accumulation_steps 8 \
     --max_train_steps 200 \
-    --learning_rate 2e-5 \
+    --learning_rate 1e-5 \
     --mixed_precision bf16 \
     --checkpointing_steps 100 \
     --allow_tf32 \
@@ -70,7 +70,7 @@ torchrun --nproc_per_node=${NGPU} --master_port 29503 \
     --t 1 \
     --sampling_steps 20 \
     --eta 0.3 \
-    --lr_warmup_steps 10 \
+    --lr_warmup_steps 0 \
     --sampler_seed 42 \
     --max_grad_norm 1.0 \
     --weight_decay 0.0001 \
@@ -80,8 +80,7 @@ torchrun --nproc_per_node=${NGPU} --master_port 29503 \
     --use_group \
     --ignore_last \
     --timestep_fraction 0.6 \
-    --init_same_noise \
     --clip_range 0.2 \
     --adv_clip_max 5.0 \
     --cfg_infer 5.0 \
-    --num_ppo_epochs 2
+    --num_ppo_epochs 1
